@@ -58,6 +58,9 @@
 
   let availableRepos = [];
   let filterDropdown = null;
+  let suggestionsList = null;
+  let tokensContainer = null;
+  let selectedRepos = [];
 
   // Wait one second after the page finishes loading
   setTimeout(init, 1000);
@@ -103,78 +106,48 @@
     const filterContainer = document.createElement('div');
     filterContainer.className = 'bettercodex-filter-container';
 
-    const inputWrapper = document.createElement('div');
-    inputWrapper.className = 'bettercodex-input-wrapper';
-
     const label = document.createElement('label');
     label.textContent = t('label');
     label.className = 'bettercodex-label';
+
+    tokensContainer = document.createElement('div');
+    tokensContainer.className = 'bettercodex-selected-container';
+
+    const inputWrapper = document.createElement('div');
+    inputWrapper.className = 'bettercodex-input-wrapper';
 
     filterDropdown = document.createElement('input');
     filterDropdown.type = 'text';
     filterDropdown.className = 'bettercodex-input';
     filterDropdown.placeholder = t('placeholder');
 
-    const suggestionsList = document.createElement('div');
+    suggestionsList = document.createElement('div');
     suggestionsList.className = 'bettercodex-suggestions';
     suggestionsList.style.display = 'none';
 
     filterDropdown.addEventListener('input', (e) => {
-      const value = e.target.value.toLowerCase();
+      showSuggestionsForValue(e.target.value);
+    });
 
-      if (value === '') {
-        suggestionsList.style.display = 'none';
-        onFilterChange();
-        return;
+    filterDropdown.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleFreeformSelection();
       }
 
-      const matches = availableRepos.filter(repo =>
-        repo.toLowerCase().includes(value)
-      );
-
-      if (matches.length > 0) {
-        suggestionsList.innerHTML = '';
-        matches.forEach(repo => {
-          const item = document.createElement('div');
-          item.className = 'bettercodex-suggestion-item';
-          item.textContent = repo;
-          item.addEventListener('click', () => {
-            filterDropdown.value = repo;
-            suggestionsList.style.display = 'none';
-            onFilterChange();
-          });
-          suggestionsList.appendChild(item);
-        });
-        suggestionsList.style.display = 'block';
-      } else {
-        suggestionsList.style.display = 'none';
+      if (e.key === 'Backspace' && filterDropdown.value === '' && selectedRepos.length > 0) {
+        removeSelectedRepo(selectedRepos[selectedRepos.length - 1]);
       }
-
-      onFilterChange();
     });
 
     document.addEventListener('click', (e) => {
       if (!inputWrapper.contains(e.target)) {
-        suggestionsList.style.display = 'none';
+        hideSuggestions();
       }
     });
 
     filterDropdown.addEventListener('focus', () => {
-      if (filterDropdown.value === '' && availableRepos.length > 0) {
-        suggestionsList.innerHTML = '';
-        availableRepos.forEach(repo => {
-          const item = document.createElement('div');
-          item.className = 'bettercodex-suggestion-item';
-          item.textContent = repo;
-          item.addEventListener('click', () => {
-            filterDropdown.value = repo;
-            suggestionsList.style.display = 'none';
-            onFilterChange();
-          });
-          suggestionsList.appendChild(item);
-        });
-        suggestionsList.style.display = 'block';
-      }
+      showSuggestionsForValue(filterDropdown.value);
     });
 
     const clearButton = document.createElement('button');
@@ -183,8 +156,8 @@
     clearButton.title = t('clearTitle');
     clearButton.addEventListener('click', () => {
       filterDropdown.value = '';
-      suggestionsList.style.display = 'none';
-      onFilterChange();
+      hideSuggestions();
+      clearSelection();
     });
 
     inputWrapper.appendChild(filterDropdown);
@@ -192,6 +165,7 @@
     inputWrapper.appendChild(suggestionsList);
 
     filterContainer.appendChild(label);
+    filterContainer.appendChild(tokensContainer);
     filterContainer.appendChild(inputWrapper);
 
     const leftSection = tabBar.querySelector('.flex.items-center.gap-2');
@@ -202,18 +176,11 @@
     console.log(logPrefix, t('uiReady'));
   }
 
-  function onFilterChange() {
-    const selectedRepo = filterDropdown.value.trim();
-
-    localStorage.setItem(STORAGE_KEY, selectedRepo);
-    applyFilter(selectedRepo);
-
-    console.log(logPrefix, t('filterChanged'), selectedRepo || t('allLabel'));
-  }
-
-  function applyFilter(repoName) {
+  function applyFilter() {
     const taskContainers = document.querySelectorAll('.group.task-row-container');
-    const filterLower = repoName.toLowerCase();
+    const activeFilters = selectedRepos
+      .map(repo => repo.toLowerCase())
+      .filter(Boolean);
 
     taskContainers.forEach(container => {
       const tertiaryDiv = container.querySelector('.text-token-text-tertiary.flex.gap-1');
@@ -238,25 +205,68 @@
         return;
       }
 
-      if (!repoName || taskRepoName.toLowerCase().includes(filterLower)) {
+      if (activeFilters.length === 0) {
         container.style.display = '';
-      } else {
-        container.style.display = 'none';
+        return;
       }
-    });
 
-    console.log(logPrefix, t('filterApplied'), repoName || t('allLabel'));
+      const taskRepoLower = taskRepoName.toLowerCase();
+      const isMatch = activeFilters.some(filterLower => taskRepoLower.includes(filterLower));
+
+      container.style.display = isMatch ? '' : 'none';
+    });
   }
 
   function loadAndApplyFilter() {
     const savedRepo = localStorage.getItem(STORAGE_KEY);
 
-    if (savedRepo && filterDropdown) {
-      filterDropdown.value = savedRepo;
-      applyFilter(savedRepo);
-
-      console.log(logPrefix, t('filterLoaded'), savedRepo);
+    if (!savedRepo || !filterDropdown) {
+      return;
     }
+
+    let reposToRestore = [];
+
+    try {
+      const parsed = JSON.parse(savedRepo);
+      if (Array.isArray(parsed)) {
+        reposToRestore = parsed;
+      } else if (parsed) {
+        reposToRestore = [parsed];
+      }
+    } catch (err) {
+      if (typeof savedRepo === 'string' && savedRepo.trim() !== '') {
+        reposToRestore = [savedRepo];
+      }
+    }
+
+    const seen = new Set();
+    const normalizedRepos = reposToRestore
+      .map(repo => (typeof repo === 'string' ? repo.trim() : ''))
+      .filter(Boolean)
+      .map(repo => {
+        const match = findMatchingRepo(repo);
+        return match || repo;
+      })
+      .filter(repo => {
+        const lower = repo.toLowerCase();
+        if (seen.has(lower)) {
+          return false;
+        }
+        seen.add(lower);
+        return true;
+      });
+
+    if (normalizedRepos.length === 0) {
+      return;
+    }
+
+    normalizedRepos.forEach(repo => addSelectedRepo(repo, { deferApply: true }));
+
+    applyAndStoreFilters({ skipLog: true });
+
+    const activeLabel = getActiveLabel();
+    console.log(logPrefix, t('filterLoaded'), activeLabel);
+    console.log(logPrefix, t('filterApplied'), activeLabel);
   }
 
   const observer = new MutationObserver((mutations) => {
@@ -264,9 +274,8 @@
       if (mutation.addedNodes.length > 0) {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1 && node.classList && node.classList.contains('task-row-container')) {
-            const currentFilter = filterDropdown ? filterDropdown.value : '';
-            if (currentFilter) {
-              applyFilter(currentFilter);
+            if (selectedRepos.length > 0) {
+              applyFilter();
             }
           }
         });
@@ -284,4 +293,183 @@
       console.log(logPrefix, t('domWatching'));
     }
   }, 1500);
+
+  function findMatchingRepo(repoName) {
+    const lowerName = repoName.toLowerCase();
+    return availableRepos.find(repo => repo.toLowerCase() === lowerName);
+  }
+
+  function addSelectedRepo(repoName, { deferApply = false } = {}) {
+    if (!repoName) {
+      return;
+    }
+
+    const match = findMatchingRepo(repoName) || repoName;
+    const normalized = match.trim();
+
+    if (!normalized) {
+      return;
+    }
+
+    const exists = selectedRepos.some(repo => repo.toLowerCase() === normalized.toLowerCase());
+    if (exists) {
+      return;
+    }
+
+    selectedRepos.push(normalized);
+    renderSelectedRepos();
+
+    if (deferApply) {
+      return;
+    }
+
+    applyAndStoreFilters();
+    hideSuggestions();
+    filterDropdown.value = '';
+  }
+
+  function removeSelectedRepo(repoName) {
+    const index = selectedRepos.findIndex(repo => repo.toLowerCase() === repoName.toLowerCase());
+
+    if (index === -1) {
+      return;
+    }
+
+    selectedRepos.splice(index, 1);
+    renderSelectedRepos();
+    applyAndStoreFilters();
+    showSuggestionsForValue(filterDropdown.value);
+  }
+
+  function clearSelection() {
+    if (selectedRepos.length === 0) {
+      return;
+    }
+
+    selectedRepos = [];
+    renderSelectedRepos();
+    applyAndStoreFilters();
+  }
+
+  function renderSelectedRepos() {
+    if (!tokensContainer) {
+      return;
+    }
+
+    tokensContainer.innerHTML = '';
+
+    if (selectedRepos.length === 0) {
+      tokensContainer.style.display = 'none';
+      return;
+    }
+
+    tokensContainer.style.display = 'flex';
+
+    selectedRepos.forEach(repo => {
+      const token = document.createElement('span');
+      token.className = 'bettercodex-token';
+
+      const text = document.createElement('span');
+      text.className = 'bettercodex-token-label';
+      text.textContent = repo;
+
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'bettercodex-token-remove';
+      removeButton.innerHTML = '×';
+      removeButton.title = `${t('clearTitle')} ${repo}`;
+      removeButton.setAttribute('aria-label', `${t('clearTitle')} ${repo}`);
+      removeButton.addEventListener('click', () => {
+        removeSelectedRepo(repo);
+      });
+
+      token.appendChild(text);
+      token.appendChild(removeButton);
+      tokensContainer.appendChild(token);
+    });
+  }
+
+  function handleFreeformSelection() {
+    const value = filterDropdown.value.trim();
+    if (!value) {
+      return;
+    }
+
+    const exactMatch = findMatchingRepo(value);
+
+    if (exactMatch) {
+      addSelectedRepo(exactMatch);
+      return;
+    }
+
+    const lowerValue = value.toLowerCase();
+    const matches = availableRepos.filter(repo =>
+      repo.toLowerCase().includes(lowerValue)
+    );
+
+    if (matches.length === 1) {
+      addSelectedRepo(matches[0]);
+    }
+  }
+
+  function showSuggestionsForValue(value) {
+    if (!suggestionsList) {
+      return;
+    }
+
+    const search = (value || '').trim().toLowerCase();
+
+    const matches = availableRepos.filter(repo =>
+      repo.toLowerCase().includes(search)
+    ).filter(repo => !selectedRepos.some(selected => selected.toLowerCase() === repo.toLowerCase()));
+
+    if (matches.length === 0) {
+      hideSuggestions();
+      return;
+    }
+
+    suggestionsList.innerHTML = '';
+
+    matches.forEach(repo => {
+      const item = document.createElement('div');
+      item.className = 'bettercodex-suggestion-item';
+      item.textContent = repo;
+      item.addEventListener('click', () => {
+        addSelectedRepo(repo);
+      });
+      suggestionsList.appendChild(item);
+    });
+
+    suggestionsList.style.display = 'block';
+    suggestionsList.scrollTop = 0;
+  }
+
+  function hideSuggestions() {
+    if (!suggestionsList) {
+      return;
+    }
+
+    suggestionsList.style.display = 'none';
+    suggestionsList.innerHTML = '';
+  }
+
+  function applyAndStoreFilters({ skipLog = false } = {}) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedRepos));
+    } catch (error) {
+      console.warn(logPrefix, 'Failed to persist selected repositories', error);
+    }
+
+    applyFilter();
+
+    if (!skipLog) {
+      const activeLabel = getActiveLabel();
+      console.log(logPrefix, t('filterChanged'), activeLabel);
+      console.log(logPrefix, t('filterApplied'), activeLabel);
+    }
+  }
+
+  function getActiveLabel() {
+    return selectedRepos.length > 0 ? selectedRepos.join(', ') : t('allLabel');
+  }
 })();

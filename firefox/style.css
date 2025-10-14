@@ -198,6 +198,11 @@
   align-items: flex-start;
 }
 
+.bettercodex-task-row {
+  display: flex;
+  align-items: flex-start;
+}
+
 .bettercodex-task-avatar-wrapper {
   flex: 0 0 auto;
   display: flex;

@@ -647,8 +647,16 @@
     const desiredUrl = `https://github.com/${owner}.png?size=80`;
 
     const textColumn = container.querySelector('.flex.flex-col.gap-0\\.5');
+    const interactiveRow = container.querySelector(
+      '.hover\\:bg-token-bg-tertiary.relative.ring-inset.focus-within\\:border-token-border-heavy.focus-within\\:border-s-2.focus-within\\:ps-\\[-2px\\]'
+    );
     const columnParent = textColumn ? textColumn.parentElement : null;
-    const searchRoot = columnParent || container;
+    const insertionParent = interactiveRow || columnParent;
+    const searchRoot = insertionParent || container;
+
+    if (interactiveRow && !interactiveRow.classList.contains('bettercodex-task-row')) {
+      interactiveRow.classList.add('bettercodex-task-row');
+    }
 
     let wrapper = searchRoot.querySelector('.bettercodex-task-avatar-wrapper');
     if (!wrapper) {
@@ -663,8 +671,10 @@
       image.loading = 'lazy';
       wrapper.appendChild(image);
 
-      if (columnParent && textColumn) {
-        columnParent.insertBefore(wrapper, textColumn);
+      if (insertionParent && textColumn) {
+        insertionParent.insertBefore(wrapper, textColumn);
+      } else if (insertionParent) {
+        insertionParent.insertBefore(wrapper, insertionParent.firstChild);
       } else if (container.firstChild) {
         container.insertBefore(wrapper, container.firstChild);
         container.classList.add('bettercodex-task-with-avatar');
@@ -679,11 +689,13 @@
       return;
     }
 
-    if (columnParent && textColumn && (wrapper.parentElement !== columnParent || wrapper.nextSibling !== textColumn)) {
-      columnParent.insertBefore(wrapper, textColumn);
+    if (insertionParent && textColumn && (wrapper.parentElement !== insertionParent || wrapper.nextSibling !== textColumn)) {
+      insertionParent.insertBefore(wrapper, textColumn);
+    } else if (insertionParent && !textColumn && wrapper.parentElement !== insertionParent) {
+      insertionParent.insertBefore(wrapper, insertionParent.firstChild);
     }
 
-    if (columnParent && textColumn) {
+    if (insertionParent) {
       container.classList.remove('bettercodex-task-with-avatar');
     }
 

@@ -7,7 +7,7 @@
 
   const translations = {
     en: {
-      label: 'Repo filter:',
+      label: 'Repository filter',
       placeholder: 'Type or select a repository…',
       clearTitle: 'Reset filter',
       init: 'Starting…',
@@ -19,9 +19,11 @@
       filterLoaded: 'Loaded saved filter:',
       domWatching: 'Started watching the Codex task list',
       allLabel: 'All',
+      multipleSelected: '{count} repos',
+      selectedSummary: 'Selected repositories',
     },
     de: {
-      label: 'Repo-Filter:',
+      label: 'Repository-Filter',
       placeholder: 'Repository eingeben oder auswählen…',
       clearTitle: 'Filter zurücksetzen',
       init: 'Starte…',
@@ -33,6 +35,8 @@
       filterLoaded: 'Gespeicherten Filter geladen:',
       domWatching: 'Beobachtung der Codex-Aufgaben gestartet',
       allLabel: 'Alle',
+      multipleSelected: '{count} Repositories',
+      selectedSummary: 'Ausgewählte Repositories',
     }
   };
 
@@ -59,8 +63,12 @@
   let availableRepos = [];
   let filterDropdown = null;
   let suggestionsList = null;
-  let tokensContainer = null;
+  let selectedSummaryButton = null;
+  let selectedMenu = null;
+  let selectedWrapper = null;
+  let selectedMenuOpen = false;
   let selectedRepos = [];
+  let availableRepoSet = new Set();
 
   // Wait one second after the page finishes loading
   setTimeout(init, 1000);
@@ -71,11 +79,12 @@
     extractRepos();
     createFilterDropdown();
     loadAndApplyFilter();
+    collectReposFromTasks();
   }
 
   function extractRepos() {
     const repoButtons = document.querySelectorAll('.flex.max-h-\\[280px\\] button[type="button"]');
-    const repoSet = new Set();
+    const repoSet = new Set(availableRepos);
 
     repoButtons.forEach(button => {
       const repoSpan = button.querySelector('span.truncate');
@@ -93,6 +102,7 @@
     });
 
     availableRepos = Array.from(repoSet).sort((a, b) => a.localeCompare(b));
+    availableRepoSet = new Set(availableRepos.map(repo => repo.toLowerCase()));
     console.log(logPrefix, t('reposFound'), availableRepos);
   }
 
@@ -106,12 +116,16 @@
     const filterContainer = document.createElement('div');
     filterContainer.className = 'bettercodex-filter-container';
 
-    const label = document.createElement('label');
-    label.textContent = t('label');
-    label.className = 'bettercodex-label';
-
-    tokensContainer = document.createElement('div');
-    tokensContainer.className = 'bettercodex-selected-container';
+    const icon = document.createElement('span');
+    icon.className = 'bettercodex-filter-icon';
+    icon.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 5H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M7 12H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M10 19H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    `;
+    icon.title = t('label');
 
     const inputWrapper = document.createElement('div');
     inputWrapper.className = 'bettercodex-input-wrapper';
@@ -120,6 +134,7 @@
     filterDropdown.type = 'text';
     filterDropdown.className = 'bettercodex-input';
     filterDropdown.placeholder = t('placeholder');
+    filterDropdown.setAttribute('aria-label', t('label'));
 
     suggestionsList = document.createElement('div');
     suggestionsList.className = 'bettercodex-suggestions';
@@ -138,11 +153,27 @@
       if (e.key === 'Backspace' && filterDropdown.value === '' && selectedRepos.length > 0) {
         removeSelectedRepo(selectedRepos[selectedRepos.length - 1]);
       }
+
+      if (e.key === 'Escape') {
+        hideSuggestions();
+        hideSelectedMenu();
+      }
     });
 
     document.addEventListener('click', (e) => {
-      if (!inputWrapper.contains(e.target)) {
+      if (inputWrapper && !inputWrapper.contains(e.target)) {
         hideSuggestions();
+      }
+
+      if (selectedWrapper && !selectedWrapper.contains(e.target)) {
+        hideSelectedMenu();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        hideSuggestions();
+        hideSelectedMenu();
       }
     });
 
@@ -160,19 +191,51 @@
       clearSelection();
     });
 
+    selectedWrapper = document.createElement('div');
+    selectedWrapper.className = 'bettercodex-selected-wrapper';
+
+    selectedSummaryButton = document.createElement('button');
+    selectedSummaryButton.type = 'button';
+    selectedSummaryButton.className = 'bettercodex-selected-summary';
+    selectedSummaryButton.addEventListener('click', () => {
+      if (selectedRepos.length === 0) {
+        return;
+      }
+
+      if (selectedMenuOpen) {
+        hideSelectedMenu();
+      } else {
+        showSelectedMenu();
+      }
+    });
+
+    selectedSummaryButton.setAttribute('aria-expanded', 'false');
+    selectedSummaryButton.setAttribute('aria-haspopup', 'true');
+    selectedSummaryButton.setAttribute('title', t('selectedSummary'));
+
+    selectedMenu = document.createElement('div');
+    selectedMenu.className = 'bettercodex-selected-menu';
+    selectedMenu.style.display = 'none';
+
+    selectedWrapper.appendChild(selectedSummaryButton);
+    selectedWrapper.appendChild(selectedMenu);
+
     inputWrapper.appendChild(filterDropdown);
     inputWrapper.appendChild(clearButton);
     inputWrapper.appendChild(suggestionsList);
 
-    filterContainer.appendChild(label);
-    filterContainer.appendChild(tokensContainer);
+    filterContainer.appendChild(icon);
+    filterContainer.appendChild(selectedWrapper);
     filterContainer.appendChild(inputWrapper);
 
     const leftSection = tabBar.querySelector('.flex.items-center.gap-2');
-    if (leftSection) {
+    if (leftSection && leftSection.parentElement) {
       leftSection.parentElement.appendChild(filterContainer);
+    } else {
+      tabBar.appendChild(filterContainer);
     }
 
+    renderSelectedSummary();
     console.log(logPrefix, t('uiReady'));
   }
 
@@ -204,6 +267,8 @@
         container.style.display = '';
         return;
       }
+
+      ensureRepoTracked(taskRepoName);
 
       if (activeFilters.length === 0) {
         container.style.display = '';
@@ -274,6 +339,7 @@
       if (mutation.addedNodes.length > 0) {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1 && node.classList && node.classList.contains('task-row-container')) {
+            collectReposFromTasks();
             if (selectedRepos.length > 0) {
               applyFilter();
             }
@@ -317,7 +383,7 @@
     }
 
     selectedRepos.push(normalized);
-    renderSelectedRepos();
+    renderSelectedSummary();
 
     if (deferApply) {
       return;
@@ -336,7 +402,7 @@
     }
 
     selectedRepos.splice(index, 1);
-    renderSelectedRepos();
+    renderSelectedSummary();
     applyAndStoreFilters();
     showSuggestionsForValue(filterDropdown.value);
   }
@@ -347,45 +413,57 @@
     }
 
     selectedRepos = [];
-    renderSelectedRepos();
+    renderSelectedSummary();
     applyAndStoreFilters();
   }
 
-  function renderSelectedRepos() {
-    if (!tokensContainer) {
+  function renderSelectedSummary() {
+    if (!selectedSummaryButton || !selectedMenu) {
       return;
     }
 
-    tokensContainer.innerHTML = '';
+    selectedMenu.innerHTML = '';
 
     if (selectedRepos.length === 0) {
-      tokensContainer.style.display = 'none';
+      selectedSummaryButton.style.display = 'none';
+      hideSelectedMenu();
       return;
     }
 
-    tokensContainer.style.display = 'flex';
+    const count = selectedRepos.length;
+    const summaryLabel = count === 1
+      ? selectedRepos[0]
+      : t('multipleSelected').replace('{count}', String(count));
+
+    selectedSummaryButton.style.display = 'inline-flex';
+    selectedSummaryButton.textContent = summaryLabel;
+    selectedSummaryButton.setAttribute('aria-expanded', selectedMenuOpen ? 'true' : 'false');
+    selectedSummaryButton.setAttribute('aria-label', `${t('selectedSummary')}: ${summaryLabel}`);
 
     selectedRepos.forEach(repo => {
-      const token = document.createElement('span');
-      token.className = 'bettercodex-token';
+      const item = document.createElement('div');
+      item.className = 'bettercodex-selected-item';
 
       const text = document.createElement('span');
-      text.className = 'bettercodex-token-label';
+      text.className = 'bettercodex-selected-item-label';
       text.textContent = repo;
 
       const removeButton = document.createElement('button');
       removeButton.type = 'button';
-      removeButton.className = 'bettercodex-token-remove';
+      removeButton.className = 'bettercodex-selected-item-remove';
       removeButton.innerHTML = '×';
       removeButton.title = `${t('clearTitle')} ${repo}`;
       removeButton.setAttribute('aria-label', `${t('clearTitle')} ${repo}`);
       removeButton.addEventListener('click', () => {
         removeSelectedRepo(repo);
+        if (selectedRepos.length === 0) {
+          hideSelectedMenu();
+        }
       });
 
-      token.appendChild(text);
-      token.appendChild(removeButton);
-      tokensContainer.appendChild(token);
+      item.appendChild(text);
+      item.appendChild(removeButton);
+      selectedMenu.appendChild(item);
     });
   }
 
@@ -453,6 +531,28 @@
     suggestionsList.innerHTML = '';
   }
 
+  function showSelectedMenu() {
+    if (!selectedMenu || selectedRepos.length === 0) {
+      return;
+    }
+
+    selectedMenu.style.display = 'block';
+    selectedMenuOpen = true;
+    selectedSummaryButton.setAttribute('aria-expanded', 'true');
+  }
+
+  function hideSelectedMenu() {
+    if (!selectedMenu) {
+      return;
+    }
+
+    selectedMenu.style.display = 'none';
+    selectedMenuOpen = false;
+    if (selectedSummaryButton) {
+      selectedSummaryButton.setAttribute('aria-expanded', 'false');
+    }
+  }
+
   function applyAndStoreFilters({ skipLog = false } = {}) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedRepos));
@@ -471,5 +571,47 @@
 
   function getActiveLabel() {
     return selectedRepos.length > 0 ? selectedRepos.join(', ') : t('allLabel');
+  }
+
+  function ensureRepoTracked(repoName) {
+    if (!repoName) {
+      return;
+    }
+
+    const normalized = repoName.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const lower = normalized.toLowerCase();
+    if (availableRepoSet.has(lower)) {
+      return;
+    }
+
+    availableRepoSet.add(lower);
+    availableRepos.push(normalized);
+    availableRepos.sort((a, b) => a.localeCompare(b));
+
+    if (suggestionsList && suggestionsList.style.display === 'block') {
+      showSuggestionsForValue(filterDropdown.value);
+    }
+  }
+
+  function collectReposFromTasks() {
+    const taskContainers = document.querySelectorAll('.group.task-row-container');
+    taskContainers.forEach(container => {
+      const tertiaryDiv = container.querySelector('.text-token-text-tertiary.flex.gap-1');
+      if (!tertiaryDiv) {
+        return;
+      }
+
+      const allSpans = tertiaryDiv.querySelectorAll('span.truncate.empty\\:hidden');
+      allSpans.forEach(span => {
+        const text = span.textContent.trim();
+        if (text.includes('/')) {
+          ensureRepoTracked(text);
+        }
+      });
+    });
   }
 })();

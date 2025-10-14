@@ -73,6 +73,7 @@
   let filterPanelOpen = false;
   let selectedRepos = [];
   let availableRepoSet = new Set();
+  const pendingRestoreRepos = new Set();
 
   // Wait one second after the page finishes loading
   setTimeout(init, 1000);
@@ -308,6 +309,7 @@
         return;
       }
 
+      ensureRepoAvatar(container, taskRepoName);
       ensureRepoTracked(taskRepoName);
 
       if (activeFilters.length === 0) {
@@ -345,27 +347,32 @@
     }
 
     const seen = new Set();
-    const normalizedRepos = reposToRestore
+    const toApply = [];
+
+    reposToRestore
       .map(repo => (typeof repo === 'string' ? repo.trim() : ''))
       .filter(Boolean)
-      .map(repo => {
-        const match = findMatchingRepo(repo);
-        return match || repo;
-      })
-      .filter(repo => {
+      .forEach(repo => {
         const lower = repo.toLowerCase();
         if (seen.has(lower)) {
-          return false;
+          return;
         }
         seen.add(lower);
-        return true;
+
+        const match = findMatchingRepo(repo);
+        if (match) {
+          toApply.push(match);
+          return;
+        }
+
+        pendingRestoreRepos.add(lower);
       });
 
-    if (normalizedRepos.length === 0) {
+    if (toApply.length === 0) {
       return;
     }
 
-    normalizedRepos.forEach(repo => addSelectedRepo(repo, { deferApply: true }));
+    toApply.forEach(repo => addSelectedRepo(repo, { deferApply: true }));
 
     applyAndStoreFilters({ skipLog: true });
 
@@ -407,31 +414,37 @@
 
   function addSelectedRepo(repoName, { deferApply = false } = {}) {
     if (!repoName) {
-      return;
+      return false;
     }
 
-    const match = findMatchingRepo(repoName) || repoName;
+    const match = findMatchingRepo(repoName);
+    if (!match) {
+      return false;
+    }
+
     const normalized = match.trim();
 
     if (!normalized) {
-      return;
+      return false;
     }
 
     const exists = selectedRepos.some(repo => repo.toLowerCase() === normalized.toLowerCase());
     if (exists) {
-      return;
+      return false;
     }
 
     selectedRepos.push(normalized);
     renderSelectedSummary();
 
     if (deferApply) {
-      return;
+      return true;
     }
 
     applyAndStoreFilters();
     hideSuggestions();
     filterDropdown.value = '';
+
+    return true;
   }
 
   function removeSelectedRepo(repoName) {
@@ -601,34 +614,150 @@
     }
 
     const lower = normalized.toLowerCase();
-    if (availableRepoSet.has(lower)) {
-      return;
+    if (!availableRepoSet.has(lower)) {
+      availableRepoSet.add(lower);
+      availableRepos.push(normalized);
+      availableRepos.sort((a, b) => a.localeCompare(b));
+
+      if (suggestionsList && suggestionsList.style.display === 'block') {
+        showSuggestionsForValue(filterDropdown.value);
+      }
     }
 
-    availableRepoSet.add(lower);
-    availableRepos.push(normalized);
-    availableRepos.sort((a, b) => a.localeCompare(b));
-
-    if (suggestionsList && suggestionsList.style.display === 'block') {
-      showSuggestionsForValue(filterDropdown.value);
+    if (pendingRestoreRepos.has(lower)) {
+      pendingRestoreRepos.delete(lower);
+      addSelectedRepo(normalized);
     }
   }
 
   function collectReposFromTasks() {
     const taskContainers = document.querySelectorAll('.group.task-row-container');
     taskContainers.forEach(container => {
-      const tertiaryDiv = container.querySelector('.text-token-text-tertiary.flex.gap-1');
-      if (!tertiaryDiv) {
+      const repoName = findRepoNameInContainer(container);
+
+      if (!repoName) {
         return;
       }
 
-      const allSpans = tertiaryDiv.querySelectorAll('span.truncate.empty\\:hidden');
-      allSpans.forEach(span => {
-        const text = span.textContent.trim();
-        if (text.includes('/')) {
-          ensureRepoTracked(text);
-        }
-      });
+      ensureRepoTracked(repoName);
+      ensureRepoAvatar(container, repoName);
     });
+  }
+
+  function ensureRepoAvatar(container, repoName) {
+    if (!container || !repoName || !repoName.includes('/')) {
+      return;
+    }
+
+    const owner = repoName.split('/')[0].trim();
+    if (!owner) {
+      return;
+    }
+
+    const desiredUrl = `https://github.com/${owner}.png?size=80`;
+
+    const textColumn = container.querySelector('.flex.flex-col.gap-0\\.5');
+    const interactiveRow = (textColumn && textColumn.closest('.hover\\:bg-token-bg-tertiary'))
+      || container.querySelector('.hover\\:bg-token-bg-tertiary.relative.ring-inset')
+      || container.querySelector('.hover\\:bg-token-bg-tertiary');
+    const columnParent = textColumn ? textColumn.parentElement : null;
+    const insertionParent = interactiveRow || columnParent;
+    const searchRoot = insertionParent || container;
+
+    if (interactiveRow && !interactiveRow.classList.contains('bettercodex-task-row')) {
+      interactiveRow.classList.add('bettercodex-task-row');
+    } else if (!interactiveRow && columnParent && !columnParent.classList.contains('bettercodex-task-row')) {
+      columnParent.classList.add('bettercodex-task-row');
+    }
+
+    let wrapper = searchRoot.querySelector('.bettercodex-task-avatar-wrapper');
+    if (!wrapper) {
+      wrapper = container.querySelector('.bettercodex-task-avatar-wrapper');
+    }
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.className = 'bettercodex-task-avatar-wrapper';
+
+      const image = document.createElement('img');
+      image.className = 'bettercodex-task-avatar';
+      image.loading = 'lazy';
+      image.decoding = 'async';
+      wrapper.appendChild(image);
+
+      if (insertionParent && textColumn) {
+        insertionParent.insertBefore(wrapper, textColumn);
+      } else if (insertionParent) {
+        insertionParent.insertBefore(wrapper, insertionParent.firstChild);
+      } else if (container.firstChild) {
+        container.insertBefore(wrapper, container.firstChild);
+        container.classList.add('bettercodex-task-with-avatar');
+      } else {
+        container.appendChild(wrapper);
+        container.classList.add('bettercodex-task-with-avatar');
+      }
+    }
+
+    const image = wrapper.querySelector('img');
+    if (!image) {
+      return;
+    }
+
+    if (insertionParent && textColumn && (wrapper.parentElement !== insertionParent || wrapper.nextSibling !== textColumn)) {
+      insertionParent.insertBefore(wrapper, textColumn);
+    } else if (insertionParent && !textColumn && wrapper.parentElement !== insertionParent) {
+      insertionParent.insertBefore(wrapper, insertionParent.firstChild);
+    }
+
+    if (insertionParent) {
+      container.classList.remove('bettercodex-task-with-avatar');
+    }
+
+    if (image.getAttribute('src') !== desiredUrl) {
+      image.src = desiredUrl;
+    }
+
+    image.alt = `${owner} avatar`;
+    wrapper.dataset.bettercodexOwner = owner;
+    wrapper.dataset.bettercodexRepo = repoName;
+  }
+
+  function findRepoNameInContainer(container) {
+    if (!container) {
+      return null;
+    }
+
+    const selectors = ['span.truncate', 'span[class*="truncate"]', 'span'];
+
+    for (const selector of selectors) {
+      const elements = container.querySelectorAll(selector);
+      for (const element of elements) {
+        const repo = extractRepoFromText(element.textContent);
+        if (repo) {
+          return repo;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function extractRepoFromText(text) {
+    if (!text) {
+      return null;
+    }
+
+    const match = text.match(/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/);
+    if (!match) {
+      return null;
+    }
+
+    const owner = match[1];
+    const repo = match[2];
+
+    if (!owner || !repo) {
+      return null;
+    }
+
+    return `${owner}/${repo}`;
   }
 })();

@@ -248,6 +248,10 @@
       filterToggleButton.setAttribute('aria-expanded', 'true');
     }
 
+    if (filterRoot) {
+      filterRoot.classList.add('bettercodex-filter-open');
+    }
+
     if (focusInput && filterDropdown) {
       requestAnimationFrame(() => filterDropdown.focus());
     }
@@ -264,6 +268,10 @@
 
     if (filterToggleButton) {
       filterToggleButton.setAttribute('aria-expanded', 'false');
+    }
+
+    if (filterRoot) {
+      filterRoot.classList.remove('bettercodex-filter-open');
     }
 
     if (filterDropdown) {

@@ -10,6 +10,10 @@
   width: 100%;
 }
 
+.bettercodex-filter-container.bettercodex-filter-open {
+  margin-top: -40px;
+}
+
 .bettercodex-filter-toggle {
   padding: 0.4rem 0.9rem;
   border-radius: 9999px;
@@ -80,6 +84,7 @@
 .bettercodex-selected-item-label {
   flex: 1 1 auto;
   overflow-wrap: anywhere;
+  font-size: 0.9rem;
 }
 
 .bettercodex-selected-item-remove {

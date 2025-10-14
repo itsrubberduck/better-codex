@@ -308,6 +308,7 @@
         return;
       }
 
+      ensureRepoAvatar(container, taskRepoName);
       ensureRepoTracked(taskRepoName);
 
       if (activeFilters.length === 0) {
@@ -627,8 +628,53 @@
         const text = span.textContent.trim();
         if (text.includes('/')) {
           ensureRepoTracked(text);
+          ensureRepoAvatar(container, text);
         }
       });
     });
+  }
+
+  function ensureRepoAvatar(container, repoName) {
+    if (!container || !repoName || !repoName.includes('/')) {
+      return;
+    }
+
+    const owner = repoName.split('/')[0].trim();
+    if (!owner) {
+      return;
+    }
+
+    const desiredUrl = `https://github.com/${owner}.png?size=80`;
+
+    let wrapper = container.querySelector('.bettercodex-task-avatar-wrapper');
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.className = 'bettercodex-task-avatar-wrapper';
+
+      const image = document.createElement('img');
+      image.className = 'bettercodex-task-avatar';
+      image.loading = 'lazy';
+      wrapper.appendChild(image);
+
+      if (container.firstChild) {
+        container.insertBefore(wrapper, container.firstChild);
+      } else {
+        container.appendChild(wrapper);
+      }
+
+      container.classList.add('bettercodex-task-with-avatar');
+    }
+
+    const image = wrapper.querySelector('img');
+    if (!image) {
+      return;
+    }
+
+    if (image.getAttribute('src') !== desiredUrl) {
+      image.src = desiredUrl;
+    }
+
+    image.alt = `${owner} avatar`;
+    wrapper.dataset.bettercodexOwner = owner;
   }
 })();

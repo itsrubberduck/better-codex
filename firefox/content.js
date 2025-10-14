@@ -646,7 +646,14 @@
 
     const desiredUrl = `https://github.com/${owner}.png?size=80`;
 
-    let wrapper = container.querySelector('.bettercodex-task-avatar-wrapper');
+    const textColumn = container.querySelector('.flex.flex-col.gap-0\\.5');
+    const columnParent = textColumn ? textColumn.parentElement : null;
+    const searchRoot = columnParent || container;
+
+    let wrapper = searchRoot.querySelector('.bettercodex-task-avatar-wrapper');
+    if (!wrapper) {
+      wrapper = container.querySelector('.bettercodex-task-avatar-wrapper');
+    }
     if (!wrapper) {
       wrapper = document.createElement('div');
       wrapper.className = 'bettercodex-task-avatar-wrapper';
@@ -656,18 +663,28 @@
       image.loading = 'lazy';
       wrapper.appendChild(image);
 
-      if (container.firstChild) {
+      if (columnParent && textColumn) {
+        columnParent.insertBefore(wrapper, textColumn);
+      } else if (container.firstChild) {
         container.insertBefore(wrapper, container.firstChild);
+        container.classList.add('bettercodex-task-with-avatar');
       } else {
         container.appendChild(wrapper);
+        container.classList.add('bettercodex-task-with-avatar');
       }
-
-      container.classList.add('bettercodex-task-with-avatar');
     }
 
     const image = wrapper.querySelector('img');
     if (!image) {
       return;
+    }
+
+    if (columnParent && textColumn && (wrapper.parentElement !== columnParent || wrapper.nextSibling !== textColumn)) {
+      columnParent.insertBefore(wrapper, textColumn);
+    }
+
+    if (columnParent && textColumn) {
+      container.classList.remove('bettercodex-task-with-avatar');
     }
 
     if (image.getAttribute('src') !== desiredUrl) {

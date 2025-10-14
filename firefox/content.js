@@ -21,6 +21,7 @@
       allLabel: 'All',
       multipleSelected: '{count} repos',
       selectedSummary: 'Selected repositories',
+      buttonLabel: 'Filter',
     },
     de: {
       label: 'Repository-Filter',
@@ -37,6 +38,7 @@
       allLabel: 'Alle',
       multipleSelected: '{count} Repositories',
       selectedSummary: 'Ausgewählte Repositories',
+      buttonLabel: 'Filter',
     }
   };
 
@@ -61,12 +63,14 @@
   ];
 
   let availableRepos = [];
+  let filterRoot = null;
+  let filterToggleButton = null;
+  let filterPanel = null;
   let filterDropdown = null;
   let suggestionsList = null;
-  let selectedSummaryButton = null;
-  let selectedMenu = null;
   let selectedWrapper = null;
-  let selectedMenuOpen = false;
+  let selectedMenu = null;
+  let filterPanelOpen = false;
   let selectedRepos = [];
   let availableRepoSet = new Set();
 
@@ -115,17 +119,32 @@
 
     const filterContainer = document.createElement('div');
     filterContainer.className = 'bettercodex-filter-container';
+    filterRoot = filterContainer;
 
-    const icon = document.createElement('span');
-    icon.className = 'bettercodex-filter-icon';
-    icon.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M4 5H20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M7 12H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M10 19H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    `;
-    icon.title = t('label');
+    filterToggleButton = document.createElement('button');
+    filterToggleButton.type = 'button';
+    filterToggleButton.className = 'bettercodex-filter-toggle';
+    filterToggleButton.textContent = t('buttonLabel');
+    filterToggleButton.setAttribute('aria-haspopup', 'true');
+    filterToggleButton.setAttribute('aria-expanded', 'false');
+    filterToggleButton.addEventListener('click', () => {
+      if (filterPanelOpen) {
+        closeFilterPanel();
+      } else {
+        openFilterPanel({ focusInput: true });
+      }
+    });
+
+    filterPanel = document.createElement('div');
+    filterPanel.className = 'bettercodex-filter-panel';
+    filterPanel.style.display = 'none';
+
+    selectedWrapper = document.createElement('div');
+    selectedWrapper.className = 'bettercodex-selected-wrapper';
+
+    selectedMenu = document.createElement('div');
+    selectedMenu.className = 'bettercodex-selected-list';
+    selectedWrapper.appendChild(selectedMenu);
 
     const inputWrapper = document.createElement('div');
     inputWrapper.className = 'bettercodex-input-wrapper';
@@ -156,28 +175,32 @@
 
       if (e.key === 'Escape') {
         hideSuggestions();
-        hideSelectedMenu();
+        closeFilterPanel();
       }
     });
 
     document.addEventListener('click', (e) => {
-      if (inputWrapper && !inputWrapper.contains(e.target)) {
-        hideSuggestions();
+      if (!filterRoot) {
+        return;
       }
 
-      if (selectedWrapper && !selectedWrapper.contains(e.target)) {
-        hideSelectedMenu();
+      if (filterPanelOpen && !filterRoot.contains(e.target)) {
+        hideSuggestions();
+        closeFilterPanel();
       }
     });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         hideSuggestions();
-        hideSelectedMenu();
+        closeFilterPanel();
       }
     });
 
     filterDropdown.addEventListener('focus', () => {
+      if (!filterPanelOpen) {
+        openFilterPanel();
+      }
       showSuggestionsForValue(filterDropdown.value);
     });
 
@@ -189,44 +212,18 @@
       filterDropdown.value = '';
       hideSuggestions();
       clearSelection();
+      filterDropdown.focus();
     });
-
-    selectedWrapper = document.createElement('div');
-    selectedWrapper.className = 'bettercodex-selected-wrapper';
-
-    selectedSummaryButton = document.createElement('button');
-    selectedSummaryButton.type = 'button';
-    selectedSummaryButton.className = 'bettercodex-selected-summary';
-    selectedSummaryButton.addEventListener('click', () => {
-      if (selectedRepos.length === 0) {
-        return;
-      }
-
-      if (selectedMenuOpen) {
-        hideSelectedMenu();
-      } else {
-        showSelectedMenu();
-      }
-    });
-
-    selectedSummaryButton.setAttribute('aria-expanded', 'false');
-    selectedSummaryButton.setAttribute('aria-haspopup', 'true');
-    selectedSummaryButton.setAttribute('title', t('selectedSummary'));
-
-    selectedMenu = document.createElement('div');
-    selectedMenu.className = 'bettercodex-selected-menu';
-    selectedMenu.style.display = 'none';
-
-    selectedWrapper.appendChild(selectedSummaryButton);
-    selectedWrapper.appendChild(selectedMenu);
 
     inputWrapper.appendChild(filterDropdown);
     inputWrapper.appendChild(clearButton);
     inputWrapper.appendChild(suggestionsList);
 
-    filterContainer.appendChild(icon);
-    filterContainer.appendChild(selectedWrapper);
-    filterContainer.appendChild(inputWrapper);
+    filterPanel.appendChild(selectedWrapper);
+    filterPanel.appendChild(inputWrapper);
+
+    filterContainer.appendChild(filterToggleButton);
+    filterContainer.appendChild(filterPanel);
 
     const leftSection = tabBar.querySelector('.flex.items-center.gap-2');
     if (leftSection && leftSection.parentElement) {
@@ -237,6 +234,41 @@
 
     renderSelectedSummary();
     console.log(logPrefix, t('uiReady'));
+  }
+
+  function openFilterPanel({ focusInput = false } = {}) {
+    if (!filterPanel) {
+      return;
+    }
+
+    filterPanel.style.display = 'flex';
+    filterPanelOpen = true;
+
+    if (filterToggleButton) {
+      filterToggleButton.setAttribute('aria-expanded', 'true');
+    }
+
+    if (focusInput && filterDropdown) {
+      requestAnimationFrame(() => filterDropdown.focus());
+    }
+  }
+
+  function closeFilterPanel() {
+    if (!filterPanel) {
+      return;
+    }
+
+    hideSuggestions();
+    filterPanel.style.display = 'none';
+    filterPanelOpen = false;
+
+    if (filterToggleButton) {
+      filterToggleButton.setAttribute('aria-expanded', 'false');
+    }
+
+    if (filterDropdown) {
+      filterDropdown.blur();
+    }
   }
 
   function applyFilter() {
@@ -418,27 +450,29 @@
   }
 
   function renderSelectedSummary() {
-    if (!selectedSummaryButton || !selectedMenu) {
+    if (filterToggleButton) {
+      const count = selectedRepos.length;
+      const baseLabel = t('buttonLabel');
+      const buttonLabel = count > 0 ? `${baseLabel} (${count})` : baseLabel;
+      filterToggleButton.textContent = buttonLabel;
+      filterToggleButton.setAttribute('aria-label', count > 0
+        ? `${t('selectedSummary')}: ${selectedRepos.join(', ')}`
+        : baseLabel);
+    }
+
+    if (!selectedMenu) {
       return;
     }
 
     selectedMenu.innerHTML = '';
 
     if (selectedRepos.length === 0) {
-      selectedSummaryButton.style.display = 'none';
-      hideSelectedMenu();
+      const emptyState = document.createElement('div');
+      emptyState.className = 'bettercodex-selected-empty';
+      emptyState.textContent = t('allLabel');
+      selectedMenu.appendChild(emptyState);
       return;
     }
-
-    const count = selectedRepos.length;
-    const summaryLabel = count === 1
-      ? selectedRepos[0]
-      : t('multipleSelected').replace('{count}', String(count));
-
-    selectedSummaryButton.style.display = 'inline-flex';
-    selectedSummaryButton.textContent = summaryLabel;
-    selectedSummaryButton.setAttribute('aria-expanded', selectedMenuOpen ? 'true' : 'false');
-    selectedSummaryButton.setAttribute('aria-label', `${t('selectedSummary')}: ${summaryLabel}`);
 
     selectedRepos.forEach(repo => {
       const item = document.createElement('div');
@@ -456,9 +490,6 @@
       removeButton.setAttribute('aria-label', `${t('clearTitle')} ${repo}`);
       removeButton.addEventListener('click', () => {
         removeSelectedRepo(repo);
-        if (selectedRepos.length === 0) {
-          hideSelectedMenu();
-        }
       });
 
       item.appendChild(text);
@@ -529,28 +560,6 @@
 
     suggestionsList.style.display = 'none';
     suggestionsList.innerHTML = '';
-  }
-
-  function showSelectedMenu() {
-    if (!selectedMenu || selectedRepos.length === 0) {
-      return;
-    }
-
-    selectedMenu.style.display = 'block';
-    selectedMenuOpen = true;
-    selectedSummaryButton.setAttribute('aria-expanded', 'true');
-  }
-
-  function hideSelectedMenu() {
-    if (!selectedMenu) {
-      return;
-    }
-
-    selectedMenu.style.display = 'none';
-    selectedMenuOpen = false;
-    if (selectedSummaryButton) {
-      selectedSummaryButton.setAttribute('aria-expanded', 'false');
-    }
   }
 
   function applyAndStoreFilters({ skipLog = false } = {}) {

@@ -1,12 +1,19 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "BetterCodex",
   "version": "1.1.0",
   "description": "Quickly filter ChatGPT Codex tasks by repository.",
   "icons": {
-    "48": "icon.png",
-    "96": "icon.png"
+    "128": "icon.png"
   },
+  "action": {
+    "default_title": "BetterCodex"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "*://*.openai.com/codex*",
+    "*://chatgpt.com/codex*"
+  ],
   "content_scripts": [
     {
       "matches": ["*://*.openai.com/codex*", "*://chatgpt.com/codex*"],
@@ -14,8 +21,5 @@
       "css": ["style.css"],
       "run_at": "document_end"
     }
-  ],
-  "permissions": [
-    "storage"
   ]
 }

@@ -1,0 +1,21 @@
+{
+  "manifest_version": 2,
+  "name": "BetterCodex",
+  "version": "1.0.0",
+  "description": "Bessere Repo-Kontrolle für Codex mit Filter-Funktion",
+  "icons": {
+    "48": "icon.png",
+    "96": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.openai.com/codex*", "*://chatgpt.com/codex*"],
+      "js": ["content.js"],
+      "css": ["style.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "permissions": [
+    "storage"
+  ]
+}

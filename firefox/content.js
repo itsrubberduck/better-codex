@@ -444,6 +444,7 @@
         return;
       }
 
+      ensureRepoAvatar(container, taskRepoName);
       ensureRepoTracked(taskRepoName);
 
       if (activeFilters.length === 0) {
@@ -791,8 +792,82 @@
         const text = span.textContent.trim();
         if (text.includes('/')) {
           ensureRepoTracked(text);
+          ensureRepoAvatar(container, text);
         }
       });
     });
+  }
+
+  function ensureRepoAvatar(container, repoName) {
+    if (!container || !repoName || !repoName.includes('/')) {
+      return;
+    }
+
+    const owner = repoName.split('/')[0].trim();
+    if (!owner) {
+      return;
+    }
+
+    const desiredUrl = `https://github.com/${owner}.png?size=80`;
+
+    const textColumn = container.querySelector('.flex.flex-col.gap-0\\.5');
+    const interactiveRow = container.querySelector(
+      '.hover\\:bg-token-bg-tertiary.relative.ring-inset.focus-within\\:border-token-border-heavy.focus-within\\:border-s-2.focus-within\\:ps-\\[-2px\\]'
+    );
+    const columnParent = textColumn ? textColumn.parentElement : null;
+    const insertionParent = interactiveRow || columnParent;
+    const searchRoot = insertionParent || container;
+
+    if (interactiveRow && !interactiveRow.classList.contains('bettercodex-task-row')) {
+      interactiveRow.classList.add('bettercodex-task-row');
+    }
+
+    let wrapper = searchRoot.querySelector('.bettercodex-task-avatar-wrapper');
+    if (!wrapper) {
+      wrapper = container.querySelector('.bettercodex-task-avatar-wrapper');
+    }
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.className = 'bettercodex-task-avatar-wrapper';
+
+      const image = document.createElement('img');
+      image.className = 'bettercodex-task-avatar';
+      image.loading = 'lazy';
+      wrapper.appendChild(image);
+
+      if (insertionParent && textColumn) {
+        insertionParent.insertBefore(wrapper, textColumn);
+      } else if (insertionParent) {
+        insertionParent.insertBefore(wrapper, insertionParent.firstChild);
+      } else if (container.firstChild) {
+        container.insertBefore(wrapper, container.firstChild);
+        container.classList.add('bettercodex-task-with-avatar');
+      } else {
+        container.appendChild(wrapper);
+        container.classList.add('bettercodex-task-with-avatar');
+      }
+    }
+
+    const image = wrapper.querySelector('img');
+    if (!image) {
+      return;
+    }
+
+    if (insertionParent && textColumn && (wrapper.parentElement !== insertionParent || wrapper.nextSibling !== textColumn)) {
+      insertionParent.insertBefore(wrapper, textColumn);
+    } else if (insertionParent && !textColumn && wrapper.parentElement !== insertionParent) {
+      insertionParent.insertBefore(wrapper, insertionParent.firstChild);
+    }
+
+    if (insertionParent) {
+      container.classList.remove('bettercodex-task-with-avatar');
+    }
+
+    if (image.getAttribute('src') !== desiredUrl) {
+      image.src = desiredUrl;
+    }
+
+    image.alt = `${owner} avatar`;
+    wrapper.dataset.bettercodexOwner = owner;
   }
 })();

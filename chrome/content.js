@@ -59,6 +59,8 @@
   let availableRepos = [];
   let filterDropdown = null;
 
+  interceptRepoApi();
+
   // Wait one second after the page finishes loading
   setTimeout(init, 1000);
 
@@ -70,27 +72,89 @@
     loadAndApplyFilter();
   }
 
-  function extractRepos() {
-    const repoButtons = document.querySelectorAll('.flex.max-h-\\[280px\\] button[type="button"]');
-    const repoSet = new Set();
+  function updateAvailableRepos(repos) {
+    const repoSet = new Set(availableRepos);
 
-    repoButtons.forEach(button => {
-      const repoSpan = button.querySelector('span.truncate');
-      if (repoSpan && repoSpan.textContent.trim()) {
-        const repoName = repoSpan.textContent.trim();
-        const lowerRepo = repoName.toLowerCase();
+    repos.forEach(repoName => {
+      if (!repoName || typeof repoName !== 'string') {
+        return;
+      }
 
-        const isIgnoredExact = IGNORED_EXACT_LABELS.includes(repoName);
-        const isIgnoredPartial = IGNORED_PARTIAL_LABELS.some(partial => lowerRepo.includes(partial));
+      const trimmed = repoName.trim();
+      const lowerRepo = trimmed.toLowerCase();
 
-        if (!isIgnoredExact && !isIgnoredPartial) {
-          repoSet.add(repoName);
-        }
+      const isIgnoredExact = IGNORED_EXACT_LABELS.includes(trimmed);
+      const isIgnoredPartial = IGNORED_PARTIAL_LABELS.some(partial => lowerRepo.includes(partial));
+
+      if (!isIgnoredExact && !isIgnoredPartial) {
+        repoSet.add(trimmed);
       }
     });
 
     availableRepos = Array.from(repoSet).sort((a, b) => a.localeCompare(b));
     console.log(logPrefix, t('reposFound'), availableRepos);
+
+    if (filterDropdown && filterDropdown.value) {
+      applyFilter(filterDropdown.value);
+    }
+  }
+
+  function extractRepos() {
+    const repoButtons = document.querySelectorAll('.flex.max-h-\\[280px\\] button[type="button"]');
+    const repos = [];
+
+    repoButtons.forEach(button => {
+      const repoSpan = button.querySelector('span.truncate');
+      if (repoSpan && repoSpan.textContent.trim()) {
+        repos.push(repoSpan.textContent.trim());
+      }
+    });
+
+    if (repos.length > 0) {
+      updateAvailableRepos(repos);
+    }
+  }
+
+  function interceptRepoApi() {
+    if (typeof window === 'undefined' || !window.fetch) {
+      return;
+    }
+
+    const originalFetch = window.fetch;
+
+    window.fetch = function(...args) {
+      const responsePromise = originalFetch.apply(this, args);
+
+      responsePromise.then(response => {
+        try {
+          const request = args[0];
+          const url = typeof request === 'string' ? request : request && request.url;
+
+          if (!url || !url.includes('/wham/github/list-repositories')) {
+            return;
+          }
+
+          response.clone().json().then(data => {
+            if (!data || !Array.isArray(data.repositories)) {
+              return;
+            }
+
+            const repos = data.repositories.map(repo => repo.repository_full_name || repo.name).filter(Boolean);
+            if (repos.length > 0) {
+              updateAvailableRepos(repos);
+            }
+          }).catch(error => {
+            console.error(logPrefix, 'Failed to parse repositories from API response', error);
+          });
+        } catch (error) {
+          console.error(logPrefix, 'Failed to inspect repository API response', error);
+        }
+      }).catch(error => {
+        console.error(logPrefix, 'Repository API fetch failed', error);
+      });
+
+      return responsePromise;
+    };
   }
 
   function createFilterDropdown() {

@@ -73,17 +73,169 @@
   let filterPanelOpen = false;
   let selectedRepos = [];
   let availableRepoSet = new Set();
+  let initTimeoutId = null;
+  let observerTimeoutId = null;
+  let observer = null;
+  let observerTarget = null;
+  let observerLogShown = false;
+  let documentListenersRegistered = false;
+  let lastPathname = null;
 
-  // Wait one second after the page finishes loading
-  setTimeout(init, 1000);
+  const NAVIGATION_EVENT = 'bettercodex:navigation';
+
+  setupNavigationWatcher();
+  handleNavigation();
 
   function init() {
+    if (!isOnCodexPage()) {
+      return;
+    }
+
     console.log(logPrefix, t('init'));
 
     extractRepos();
     createFilterDropdown();
     loadAndApplyFilter();
     collectReposFromTasks();
+    ensureObserver();
+  }
+
+  function cleanup() {
+    if (initTimeoutId) {
+      clearTimeout(initTimeoutId);
+      initTimeoutId = null;
+    }
+
+    if (observerTimeoutId) {
+      clearTimeout(observerTimeoutId);
+      observerTimeoutId = null;
+    }
+
+    if (observer) {
+      observer.disconnect();
+    }
+
+    observerTarget = null;
+    observerLogShown = false;
+
+    if (filterRoot && filterRoot.parentElement) {
+      filterRoot.remove();
+    }
+
+    filterRoot = null;
+    filterToggleButton = null;
+    filterPanel = null;
+    filterDropdown = null;
+    suggestionsList = null;
+    selectedWrapper = null;
+    selectedMenu = null;
+    filterPanelOpen = false;
+    selectedRepos = [];
+    availableRepos = [];
+    availableRepoSet = new Set();
+  }
+
+  function isOnCodexPage() {
+    return location.pathname.startsWith('/codex');
+  }
+
+  function scheduleInit({ force = false } = {}) {
+    if (!isOnCodexPage()) {
+      return;
+    }
+
+    if (initTimeoutId) {
+      clearTimeout(initTimeoutId);
+      initTimeoutId = null;
+    }
+
+    if (!force && filterRoot && document.body.contains(filterRoot)) {
+      return;
+    }
+
+    initTimeoutId = setTimeout(() => {
+      initTimeoutId = null;
+      init();
+    }, 1000);
+  }
+
+  function setupNavigationWatcher() {
+    const dispatchNavigation = () => window.dispatchEvent(new Event(NAVIGATION_EVENT));
+
+    const wrapHistoryMethod = (method) => {
+      const original = history[method];
+      if (typeof original !== 'function') {
+        return;
+      }
+
+      history[method] = function(...args) {
+        const result = original.apply(this, args);
+        dispatchNavigation();
+        return result;
+      };
+    };
+
+    wrapHistoryMethod('pushState');
+    wrapHistoryMethod('replaceState');
+
+    window.addEventListener('popstate', dispatchNavigation);
+    window.addEventListener('hashchange', dispatchNavigation);
+    window.addEventListener(NAVIGATION_EVENT, handleNavigation);
+  }
+
+  function handleNavigation() {
+    const currentPath = location.pathname;
+    const pathChanged = currentPath !== lastPathname;
+    lastPathname = currentPath;
+
+    if (!isOnCodexPage()) {
+      cleanup();
+      return;
+    }
+
+    if (pathChanged) {
+      cleanup();
+      scheduleInit({ force: true });
+      return;
+    }
+
+    if (!filterRoot || !document.body.contains(filterRoot)) {
+      cleanup();
+      scheduleInit({ force: true });
+      return;
+    }
+
+    collectReposFromTasks();
+    applyFilter();
+    ensureObserver();
+  }
+
+  const documentClickHandler = (e) => {
+    if (!filterRoot) {
+      return;
+    }
+
+    if (filterPanelOpen && !filterRoot.contains(e.target)) {
+      hideSuggestions();
+      closeFilterPanel();
+    }
+  };
+
+  const documentKeydownHandler = (e) => {
+    if (e.key === 'Escape') {
+      hideSuggestions();
+      closeFilterPanel();
+    }
+  };
+
+  function registerDocumentListeners() {
+    if (documentListenersRegistered) {
+      return;
+    }
+
+    document.addEventListener('click', documentClickHandler);
+    document.addEventListener('keydown', documentKeydownHandler);
+    documentListenersRegistered = true;
   }
 
   function extractRepos() {
@@ -179,23 +331,7 @@
       }
     });
 
-    document.addEventListener('click', (e) => {
-      if (!filterRoot) {
-        return;
-      }
-
-      if (filterPanelOpen && !filterRoot.contains(e.target)) {
-        hideSuggestions();
-        closeFilterPanel();
-      }
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        hideSuggestions();
-        closeFilterPanel();
-      }
-    });
+    registerDocumentListeners();
 
     filterDropdown.addEventListener('focus', () => {
       if (!filterPanelOpen) {
@@ -374,7 +510,7 @@
     console.log(logPrefix, t('filterApplied'), activeLabel);
   }
 
-  const observer = new MutationObserver((mutations) => {
+  const mutationCallback = (mutations) => {
     mutations.forEach((mutation) => {
       if (mutation.addedNodes.length > 0) {
         mutation.addedNodes.forEach((node) => {
@@ -387,18 +523,46 @@
         });
       }
     });
-  });
+  };
 
-  setTimeout(() => {
-    const tasksContainer = document.querySelector('.flex.flex-col.justify-center.pb-20');
-    if (tasksContainer) {
+  function ensureObserver() {
+    if (!isOnCodexPage()) {
+      return;
+    }
+
+    if (!observer) {
+      observer = new MutationObserver(mutationCallback);
+    }
+
+    if (observerTarget && observerTarget.isConnected) {
+      return;
+    }
+
+    if (observerTimeoutId) {
+      clearTimeout(observerTimeoutId);
+    }
+
+    observerTimeoutId = setTimeout(() => {
+      const tasksContainer = document.querySelector('.flex.flex-col.justify-center.pb-20');
+      if (!tasksContainer) {
+        observerTarget = null;
+        observerLogShown = false;
+        return;
+      }
+
+      observer.disconnect();
       observer.observe(tasksContainer, {
         childList: true,
         subtree: true
       });
-      console.log(logPrefix, t('domWatching'));
-    }
-  }, 1500);
+      observerTarget = tasksContainer;
+
+      if (!observerLogShown) {
+        console.log(logPrefix, t('domWatching'));
+        observerLogShown = true;
+      }
+    }, 1500);
+  }
 
   function findMatchingRepo(repoName) {
     const lowerName = repoName.toLowerCase();

@@ -15,20 +15,21 @@ BetterCodex adds a repository filter to the ChatGPT Codex task list so you can s
 
 ### Create installable packages
 
-Run the helper script to bundle both extensions into ready-to-upload archives:
+Run the helper script to bundle both extensions into ready-to-upload archives and (optionally) produce a signed Firefox build when your Mozilla API credentials are available in `~/.bashrc`:
 
 ```bash
 ./scripts/package_extensions.sh
 ```
 
-The command produces `dist/chrome.zip` and `dist/firefox.xpi`. You can upload these files directly to the Chrome Web Store and the Firefox Add-ons Developer Hub for publishing or share them for manual installation. The `.xpi` extension is required for Firefox to recognise the package as an installable add-on.
+The command produces `dist/chrome.zip` and `dist/firefox.xpi`. When `web-ext` is installed and your `AMO_JWT_ISSUER`/`AMO_JWT_SECRET` (or `WEB_EXT_API_KEY`/`WEB_EXT_API_SECRET`) variables are exported in `~/.bashrc`, the script also signs the Firefox add-on and stores the result in `dist/firefox-signed.xpi`. You can upload these files directly to the Chrome Web Store and the Firefox Add-ons Developer Hub for publishing or share them for manual installation. The `.xpi` extension is required for Firefox to recognise the package as an installable add-on.
 
 ### Firefox
 
 1. Download or clone this repository and open the `firefox` folder.
 2. Visit `about:debugging#/runtime/this-firefox` in Firefox.
 3. Click **Load Temporary Add-on…** and select the `manifest.json` file inside the `firefox` folder.
-4. Navigate to ChatGPT Codex – the filter appears automatically within a second of the page loading.
+4. Use the **Inspect** button next to the loaded add-on in the runtime list whenever you want to open the DevTools console or reload the extension after making code changes.
+5. Navigate to ChatGPT Codex – the filter appears automatically within a second of the page loading.
 
 > **Tip:** For long-term use you can package the folder and submit it for signing at [addons.mozilla.org/developers](https://addons.mozilla.org/developers).
 
@@ -39,6 +40,22 @@ The command produces `dist/chrome.zip` and `dist/firefox.xpi`. You can upload th
 3. Enable **Developer mode** (usually a toggle in the top-right corner).
 4. Choose **Load unpacked** and select the `chrome` folder.
 5. Open ChatGPT Codex; the repository filter will appear automatically after the page loads.
+
+## Local development
+
+### Firefox with live reload
+
+Install the [`web-ext`](https://extensionworkshop.com/documentation/develop/web-ext-command-reference/) CLI once (`npm install -g web-ext`). Then run the extension in a dedicated Firefox profile that automatically reloads when files change:
+
+```bash
+web-ext run --source-dir firefox --watch-file firefox --browser-console
+```
+
+If you already have signing credentials exported in `~/.bashrc`, the same values are reused when you later run the packaging script.
+
+### Chromium-based browsers
+
+Chromium does not provide a built-in live reload workflow for unpacked extensions, but you can keep the Extensions page open with **Developer mode** enabled and click the **Reload** icon after each change. Tools like [Extensions Reloader](https://chromewebstore.google.com/detail/extensions-reloader/ifooldnmmcmlbdennkpdnlnbgbmfalko) can speed up the process if you prefer one-click reloads.
 
 ## Usage
 

@@ -13,6 +13,16 @@ BetterCodex adds a repository filter to the ChatGPT Codex task list so you can s
 
 ## Installation
 
+### Build installable packages (Chrome + Firefox)
+
+Run the helper script to generate ready-to-upload ZIP archives for both browsers:
+
+```bash
+./scripts/package-extensions.sh
+```
+
+The command creates `dist/chrome.zip` and `dist/firefox.zip`. Upload these files to the Chrome Web Store or submit the Firefox archive for signing on addons.mozilla.org. The script is safe to re-run whenever you update the extension code.
+
 ### Firefox
 
 1. Download or clone this repository and open the `firefox` folder.

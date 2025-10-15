@@ -57,6 +57,7 @@ EOM
     --source-dir "$source_dir"
     --artifacts-dir "$SIGNED_WORK_DIR"
     --api-secret "$AMO_JWT_SECRET"
+    --api-key "$AMO_JWT_ISSUER"
     --channel "listed"
   )
 

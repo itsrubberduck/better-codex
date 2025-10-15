@@ -81,6 +81,13 @@
   color: var(--text-primary, #111827);
 }
 
+.bettercodex-selected-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1 1 auto;
+}
+
 .bettercodex-selected-item-label {
   flex: 1 1 auto;
   overflow-wrap: anywhere;
@@ -180,11 +187,32 @@
 }
 
 .bettercodex-suggestion-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
   padding: 0.5rem 0.75rem;
   cursor: pointer;
   font-size: 0.875rem;
   color: var(--text-primary, #111827);
   transition: background-color 0.15s ease;
+}
+
+.bettercodex-suggestion-title {
+  font-weight: 500;
+}
+
+.bettercodex-repo-url {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #6b7280);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.bettercodex-repo-url:hover,
+.bettercodex-repo-url:focus-visible {
+  color: var(--text-primary, #111827);
+  text-decoration: underline;
+  outline: none;
 }
 
 .bettercodex-suggestion-item:hover,
@@ -226,6 +254,15 @@
   .bettercodex-selected-item-remove:hover,
   .bettercodex-selected-item-remove:focus-visible {
     background-color: rgba(70, 70, 70, 0.85);
+    color: var(--text-primary, #f9fafb);
+  }
+
+  .bettercodex-repo-url {
+    color: var(--text-secondary, #9ca3af);
+  }
+
+  .bettercodex-repo-url:hover,
+  .bettercodex-repo-url:focus-visible {
     color: var(--text-primary, #f9fafb);
   }
 

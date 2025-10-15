@@ -22,4 +22,4 @@ package() {
 }
 
 package "$ROOT_DIR/chrome" "chrome.zip"
-package "$ROOT_DIR/firefox" "firefox.zip"
+package "$ROOT_DIR/firefox" "firefox.xpi"

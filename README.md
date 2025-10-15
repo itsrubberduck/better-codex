@@ -15,13 +15,13 @@ BetterCodex adds a repository filter to the ChatGPT Codex task list so you can s
 
 ### Create installable packages
 
-Run the helper script to bundle both extensions into ready-to-upload ZIP archives:
+Run the helper script to bundle both extensions into ready-to-upload archives:
 
 ```bash
 ./scripts/package_extensions.sh
 ```
 
-The command produces `dist/chrome.zip` and `dist/firefox.zip`. You can upload these files directly to the Chrome Web Store and the Firefox Add-ons Developer Hub for publishing or share them for manual installation.
+The command produces `dist/chrome.zip` and `dist/firefox.xpi`. You can upload these files directly to the Chrome Web Store and the Firefox Add-ons Developer Hub for publishing or share them for manual installation. The `.xpi` extension is required for Firefox to recognise the package as an installable add-on.
 
 ### Firefox
 

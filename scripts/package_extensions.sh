@@ -59,6 +59,7 @@ EOM
     --api-secret "$AMO_JWT_SECRET"
     --api-key "$AMO_JWT_ISSUER"
     --channel "listed"
+      --amo-metadata ../firefox/amo-metadata.json
   )
 
   if [ -n "${WEB_EXT_CHANNEL:-}" ]; then

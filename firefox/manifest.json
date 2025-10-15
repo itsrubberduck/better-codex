@@ -1,11 +1,28 @@
 {
+      "license": "MIT",
   "manifest_version": 2,
+  "browser_specific_settings": {
+  "gecko": {
+    "id": "bettercodex@itsrubberduck",
+    "strict_min_version": "115.0"
+  }
+},
   "name": "BetterCodex",
   "version": "1.1.0",
   "description": "Quickly filter ChatGPT Codex tasks by repository.",
   "icons": {
-    "48": "icon.png",
-    "96": "icon.png"
+       "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+
+  "browser_action": {
+    "default_icon": {
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    },
+    "default_title": "BetterCodex"
   },
   "content_scripts": [
     {

@@ -81,12 +81,6 @@
   color: var(--text-primary, #111827);
 }
 
-.bettercodex-selected-item-label {
-  flex: 1 1 auto;
-  overflow-wrap: anywhere;
-  font-size: 0.9rem;
-}
-
 .bettercodex-selected-item-remove {
   background: none;
   border: none;
@@ -193,6 +187,49 @@
   outline: none;
 }
 
+.bettercodex-repo-info {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.bettercodex-repo-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background-color: var(--bg-hover, #f3f4f6);
+}
+
+.bettercodex-repo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bettercodex-repo-label {
+  font-size: 0.9rem;
+  color: var(--text-primary, #111827);
+  overflow-wrap: anywhere;
+}
+
+.bettercodex-repo-url {
+  font-size: 0.75rem;
+  color: var(--accent, #0285FF);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.bettercodex-repo-url:hover,
+.bettercodex-repo-url:focus-visible {
+  text-decoration: underline;
+}
+
 @media (prefers-color-scheme: dark) {
   .bettercodex-filter-toggle {
     border-color: var(--border-light, #4d4d4d);
@@ -271,5 +308,17 @@
   .bettercodex-suggestion-item:hover,
   .bettercodex-suggestion-item:focus-visible {
     background-color: rgba(70, 70, 70, 0.85);
+  }
+
+  .bettercodex-repo-avatar {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .bettercodex-repo-label {
+    color: var(--text-primary, #f9fafb);
+  }
+
+  .bettercodex-repo-url {
+    color: var(--accent, #60a5fa);
   }
 }

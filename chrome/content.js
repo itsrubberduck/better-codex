@@ -79,12 +79,22 @@
   let observerTarget = null;
   let observerLogShown = false;
   let documentListenersRegistered = false;
-  let lastPathname = null;
+  let lastHref = null;
+  let lastWasOnCodex = false;
+  let locationIntervalId = null;
 
+  const CODEX_URL_PREFIXES = [
+    'https://chatgpt.com/codex',
+    'https://www.chatgpt.com/codex',
+    'https://platform.openai.com/codex',
+    'https://api.openai.com/codex',
+  ];
+  const LOCATION_CHECK_INTERVAL = 1000;
   const NAVIGATION_EVENT = 'bettercodex:navigation';
 
   setupNavigationWatcher();
-  handleNavigation();
+  setupLocationWatcher();
+  handleNavigation({ force: true });
 
   function init() {
     if (!isOnCodexPage()) {
@@ -136,7 +146,16 @@
   }
 
   function isOnCodexPage() {
-    return location.pathname.startsWith('/codex');
+    const href = location.href;
+    if (!href) {
+      return false;
+    }
+
+    if (CODEX_URL_PREFIXES.some(prefix => href.startsWith(prefix))) {
+      return true;
+    }
+
+    return location.hostname.endsWith('openai.com') && location.pathname.startsWith('/codex');
   }
 
   function scheduleInit({ force = false } = {}) {
@@ -156,7 +175,7 @@
     initTimeoutId = setTimeout(() => {
       initTimeoutId = null;
       init();
-    }, 1000);
+    }, 0);
   }
 
   function setupNavigationWatcher() {
@@ -180,20 +199,37 @@
 
     window.addEventListener('popstate', dispatchNavigation);
     window.addEventListener('hashchange', dispatchNavigation);
-    window.addEventListener(NAVIGATION_EVENT, handleNavigation);
+    window.addEventListener(NAVIGATION_EVENT, () => handleNavigation({ force: true }));
   }
 
-  function handleNavigation() {
-    const currentPath = location.pathname;
-    const pathChanged = currentPath !== lastPathname;
-    lastPathname = currentPath;
-
-    if (!isOnCodexPage()) {
-      cleanup();
+  function setupLocationWatcher() {
+    if (locationIntervalId) {
       return;
     }
 
-    if (pathChanged) {
+    locationIntervalId = setInterval(() => {
+      handleNavigation();
+    }, LOCATION_CHECK_INTERVAL);
+  }
+
+  function handleNavigation({ force = false } = {}) {
+    const currentHref = location.href;
+    const hrefChanged = currentHref !== lastHref;
+    lastHref = currentHref;
+    const onCodex = isOnCodexPage();
+
+    if (!onCodex) {
+      if (lastWasOnCodex) {
+        cleanup();
+      }
+      lastWasOnCodex = false;
+      return;
+    }
+
+    const shouldReinit = force || !lastWasOnCodex || hrefChanged;
+    lastWasOnCodex = true;
+
+    if (shouldReinit) {
       cleanup();
       scheduleInit({ force: true });
       return;
@@ -418,7 +454,7 @@
   function applyFilter() {
     const taskContainers = document.querySelectorAll('.group.task-row-container');
     const activeFilters = selectedRepos
-      .map(repo => repo.toLowerCase())
+      .map(repo => (typeof repo === 'string' ? repo : ''))
       .filter(Boolean);
 
     taskContainers.forEach(container => {
@@ -451,8 +487,7 @@
         return;
       }
 
-      const taskRepoLower = taskRepoName.toLowerCase();
-      const isMatch = activeFilters.some(filterLower => taskRepoLower.includes(filterLower));
+      const isMatch = activeFilters.some(filterValue => matchesRepoFilter(filterValue, taskRepoName));
 
       container.style.display = isMatch ? '' : 'none';
     });
@@ -650,9 +685,7 @@
       const item = document.createElement('div');
       item.className = 'bettercodex-selected-item';
 
-      const text = document.createElement('span');
-      text.className = 'bettercodex-selected-item-label';
-      text.textContent = repo;
+      const content = createRepoInfo(repo);
 
       const removeButton = document.createElement('button');
       removeButton.type = 'button';
@@ -664,7 +697,7 @@
         removeSelectedRepo(repo);
       });
 
-      item.appendChild(text);
+      item.appendChild(content);
       item.appendChild(removeButton);
       selectedMenu.appendChild(item);
     });
@@ -690,7 +723,10 @@
 
     if (matches.length === 1) {
       addSelectedRepo(matches[0]);
+      return;
     }
+
+    addSelectedRepo(value);
   }
 
   function showSuggestionsForValue(value) {
@@ -714,7 +750,7 @@
     matches.forEach(repo => {
       const item = document.createElement('div');
       item.className = 'bettercodex-suggestion-item';
-      item.textContent = repo;
+      item.appendChild(createRepoInfo(repo));
       item.addEventListener('click', () => {
         addSelectedRepo(repo);
       });
@@ -776,6 +812,96 @@
     if (suggestionsList && suggestionsList.style.display === 'block') {
       showSuggestionsForValue(filterDropdown.value);
     }
+  }
+
+  function matchesRepoFilter(filterValue, repoName) {
+    if (!repoName) {
+      return false;
+    }
+
+    const trimmedFilter = (filterValue || '').trim();
+    if (!trimmedFilter) {
+      return false;
+    }
+
+    const normalizedFilter = trimmedFilter.toLowerCase();
+    const repoLower = repoName.toLowerCase();
+    const startsWithWildcard = normalizedFilter.startsWith('*');
+    const endsWithWildcard = normalizedFilter.endsWith('*');
+    const core = normalizedFilter.slice(startsWithWildcard ? 1 : 0, normalizedFilter.length - (endsWithWildcard ? 1 : 0));
+
+    if (!startsWithWildcard && !endsWithWildcard) {
+      return repoLower.includes(normalizedFilter);
+    }
+
+    if (!core) {
+      return true;
+    }
+
+    if (startsWithWildcard && endsWithWildcard) {
+      return repoLower.includes(core);
+    }
+
+    if (startsWithWildcard) {
+      return repoLower.endsWith(core);
+    }
+
+    return repoLower.startsWith(core);
+  }
+
+  function createRepoInfo(repoName) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bettercodex-repo-info';
+
+    const avatarUrl = getRepoAvatarUrl(repoName);
+    if (avatarUrl) {
+      const avatar = document.createElement('img');
+      avatar.className = 'bettercodex-repo-avatar';
+      avatar.src = avatarUrl;
+      avatar.alt = '';
+      avatar.referrerPolicy = 'no-referrer';
+      wrapper.appendChild(avatar);
+    }
+
+    const textWrapper = document.createElement('div');
+    textWrapper.className = 'bettercodex-repo-text';
+
+    const label = document.createElement('span');
+    label.className = 'bettercodex-repo-label';
+    label.textContent = repoName;
+    textWrapper.appendChild(label);
+
+    if (avatarUrl) {
+      const urlLink = document.createElement('a');
+      urlLink.className = 'bettercodex-repo-url';
+      urlLink.href = avatarUrl;
+      urlLink.target = '_blank';
+      urlLink.rel = 'noreferrer noopener';
+      urlLink.textContent = avatarUrl;
+      textWrapper.appendChild(urlLink);
+    }
+
+    wrapper.appendChild(textWrapper);
+
+    return wrapper;
+  }
+
+  function getRepoAvatarUrl(repoName) {
+    if (typeof repoName !== 'string') {
+      return null;
+    }
+
+    const sanitized = repoName.trim().replace(/^\*+/, '').replace(/\*+$/, '');
+    if (!sanitized) {
+      return null;
+    }
+
+    const owner = sanitized.split('/')[0];
+    if (!owner || /[^a-zA-Z0-9-]/.test(owner)) {
+      return null;
+    }
+
+    return `https://github.com/${owner}.png`;
   }
 
   function collectReposFromTasks() {

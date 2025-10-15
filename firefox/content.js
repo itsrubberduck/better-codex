@@ -80,8 +80,11 @@
   let observerLogShown = false;
   let documentListenersRegistered = false;
   let lastPathname = null;
+  let lastLocationHref = null;
+  let locationCheckIntervalId = null;
 
   const NAVIGATION_EVENT = 'bettercodex:navigation';
+  const CODEX_URL_PREFIX = 'https://chatgpt.com/codex';
 
   setupNavigationWatcher();
   handleNavigation();
@@ -94,7 +97,13 @@
     console.log(logPrefix, t('init'));
 
     extractRepos();
-    createFilterDropdown();
+    const filterCreated = createFilterDropdown();
+
+    if (!filterCreated) {
+      scheduleInit({ force: true, delay: 300 });
+      return;
+    }
+
     loadAndApplyFilter();
     collectReposFromTasks();
     ensureObserver();
@@ -136,10 +145,10 @@
   }
 
   function isOnCodexPage() {
-    return location.pathname.startsWith('/codex');
+    return location.href.startsWith(CODEX_URL_PREFIX);
   }
 
-  function scheduleInit({ force = false } = {}) {
+  function scheduleInit({ force = false, delay = 0 } = {}) {
     if (!isOnCodexPage()) {
       return;
     }
@@ -156,7 +165,7 @@
     initTimeoutId = setTimeout(() => {
       initTimeoutId = null;
       init();
-    }, 1000);
+    }, delay);
   }
 
   function setupNavigationWatcher() {
@@ -181,6 +190,24 @@
     window.addEventListener('popstate', dispatchNavigation);
     window.addEventListener('hashchange', dispatchNavigation);
     window.addEventListener(NAVIGATION_EVENT, handleNavigation);
+
+    lastLocationHref = location.href;
+
+    if (!locationCheckIntervalId) {
+      locationCheckIntervalId = setInterval(() => {
+        const currentHref = location.href;
+
+        if (currentHref !== lastLocationHref) {
+          lastLocationHref = currentHref;
+          dispatchNavigation();
+          return;
+        }
+
+        if (isOnCodexPage()) {
+          scheduleInit();
+        }
+      }, 1000);
+    }
   }
 
   function handleNavigation() {
@@ -266,7 +293,7 @@
     const tabBar = document.querySelector('.border-token-border-primary.mt-4.flex.w-full');
     if (!tabBar) {
       console.error(logPrefix, t('tabBarMissing'));
-      return;
+      return false;
     }
 
     const filterContainer = document.createElement('div');
@@ -370,6 +397,7 @@
 
     renderSelectedSummary();
     console.log(logPrefix, t('uiReady'));
+    return true;
   }
 
   function openFilterPanel({ focusInput = false } = {}) {
@@ -418,7 +446,7 @@
   function applyFilter() {
     const taskContainers = document.querySelectorAll('.group.task-row-container');
     const activeFilters = selectedRepos
-      .map(repo => repo.toLowerCase())
+      .map(repo => repo.trim())
       .filter(Boolean);
 
     taskContainers.forEach(container => {
@@ -451,11 +479,48 @@
         return;
       }
 
-      const taskRepoLower = taskRepoName.toLowerCase();
-      const isMatch = activeFilters.some(filterLower => taskRepoLower.includes(filterLower));
+      const isMatch = activeFilters.some(filterValue => matchesFilter(taskRepoName, filterValue));
 
       container.style.display = isMatch ? '' : 'none';
     });
+  }
+
+  function matchesFilter(taskRepoName, filterValue) {
+    const repoLower = (taskRepoName || '').toLowerCase();
+    let normalizedFilter = (filterValue || '').toLowerCase();
+
+    if (!normalizedFilter) {
+      return true;
+    }
+
+    const startsWithWildcard = normalizedFilter.startsWith('*');
+    const endsWithWildcard = normalizedFilter.endsWith('*');
+
+    if (startsWithWildcard) {
+      normalizedFilter = normalizedFilter.slice(1);
+    }
+
+    if (endsWithWildcard) {
+      normalizedFilter = normalizedFilter.slice(0, -1);
+    }
+
+    if (!normalizedFilter) {
+      return true;
+    }
+
+    if (startsWithWildcard && endsWithWildcard) {
+      return repoLower.includes(normalizedFilter);
+    }
+
+    if (startsWithWildcard) {
+      return repoLower.endsWith(normalizedFilter);
+    }
+
+    if (endsWithWildcard) {
+      return repoLower.startsWith(normalizedFilter);
+    }
+
+    return repoLower.includes(normalizedFilter);
   }
 
   function loadAndApplyFilter() {
@@ -650,9 +715,28 @@
       const item = document.createElement('div');
       item.className = 'bettercodex-selected-item';
 
+      const info = document.createElement('div');
+      info.className = 'bettercodex-selected-item-info';
+
       const text = document.createElement('span');
       text.className = 'bettercodex-selected-item-label';
       text.textContent = repo;
+      info.appendChild(text);
+
+      const avatarUrl = getRepoAvatarUrl(repo);
+
+      if (avatarUrl) {
+        const link = document.createElement('a');
+        link.className = 'bettercodex-repo-url';
+        link.href = avatarUrl;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.textContent = avatarUrl;
+        link.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        info.appendChild(link);
+      }
 
       const removeButton = document.createElement('button');
       removeButton.type = 'button';
@@ -664,7 +748,7 @@
         removeSelectedRepo(repo);
       });
 
-      item.appendChild(text);
+      item.appendChild(info);
       item.appendChild(removeButton);
       selectedMenu.appendChild(item);
     });
@@ -690,7 +774,10 @@
 
     if (matches.length === 1) {
       addSelectedRepo(matches[0]);
+      return;
     }
+
+    addSelectedRepo(value);
   }
 
   function showSuggestionsForValue(value) {
@@ -714,7 +801,27 @@
     matches.forEach(repo => {
       const item = document.createElement('div');
       item.className = 'bettercodex-suggestion-item';
-      item.textContent = repo;
+
+      const title = document.createElement('span');
+      title.className = 'bettercodex-suggestion-title';
+      title.textContent = repo;
+      item.appendChild(title);
+
+      const avatarUrl = getRepoAvatarUrl(repo);
+
+      if (avatarUrl) {
+        const link = document.createElement('a');
+        link.className = 'bettercodex-repo-url';
+        link.href = avatarUrl;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.textContent = avatarUrl;
+        link.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        item.appendChild(link);
+      }
+
       item.addEventListener('click', () => {
         addSelectedRepo(repo);
       });
@@ -732,6 +839,25 @@
 
     suggestionsList.style.display = 'none';
     suggestionsList.innerHTML = '';
+  }
+
+  function getRepoAvatarUrl(repoName) {
+    if (typeof repoName !== 'string') {
+      return '';
+    }
+
+    const [owner] = repoName.split('/');
+    const trimmedOwner = (owner || '').trim();
+
+    if (!trimmedOwner) {
+      return '';
+    }
+
+    if (!/^[A-Za-z0-9-]+$/.test(trimmedOwner)) {
+      return '';
+    }
+
+    return `https://github.com/${trimmedOwner}.png`;
   }
 
   function applyAndStoreFilters({ skipLog = false } = {}) {

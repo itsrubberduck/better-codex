@@ -4,7 +4,7 @@ set -euo pipefail
 # shellcheck disable=SC1090
 if [ -f "$HOME/.bashrc" ]; then
   set +u
-  source "$HOME/.bashrc"
+  #source "$HOME/.bashrc"
   set -u
 fi
 
@@ -56,7 +56,8 @@ EOM
     sign
     --source-dir "$source_dir"
     --artifacts-dir "$SIGNED_WORK_DIR"
-    --overwrite-dest
+    --api-secret "$AMO_JWT_SECRET"
+    --channel "listed"
   )
 
   if [ -n "${WEB_EXT_CHANNEL:-}" ]; then

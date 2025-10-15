@@ -458,22 +458,7 @@
       .filter(Boolean);
 
     taskContainers.forEach(container => {
-      const tertiaryDiv = container.querySelector('.text-token-text-tertiary.flex.gap-1');
-
-      if (!tertiaryDiv) {
-        container.style.display = '';
-        return;
-      }
-
-      const allSpans = tertiaryDiv.querySelectorAll('span.truncate.empty\\:hidden');
-      let taskRepoName = '';
-
-      allSpans.forEach(span => {
-        const text = span.textContent.trim();
-        if (text.includes('/')) {
-          taskRepoName = text;
-        }
-      });
+      const taskRepoName = extractRepoNameFromContainer(container);
 
       if (!taskRepoName) {
         container.style.display = '';
@@ -481,6 +466,7 @@
       }
 
       ensureRepoTracked(taskRepoName);
+      ensureTaskHasAvatar(container, taskRepoName);
 
       if (activeFilters.length === 0) {
         container.style.display = '';
@@ -871,19 +857,63 @@
     label.textContent = repoName;
     textWrapper.appendChild(label);
 
-    if (avatarUrl) {
-      const urlLink = document.createElement('a');
-      urlLink.className = 'bettercodex-repo-url';
-      urlLink.href = avatarUrl;
-      urlLink.target = '_blank';
-      urlLink.rel = 'noreferrer noopener';
-      urlLink.textContent = avatarUrl;
-      textWrapper.appendChild(urlLink);
-    }
-
     wrapper.appendChild(textWrapper);
 
     return wrapper;
+  }
+
+  function extractRepoNameFromContainer(container) {
+    if (!container) {
+      return '';
+    }
+
+    const tertiaryDiv = container.querySelector('.text-token-text-tertiary.flex.gap-1');
+    if (!tertiaryDiv) {
+      return '';
+    }
+
+    const allSpans = tertiaryDiv.querySelectorAll('span.truncate.empty\\:hidden');
+    for (const span of allSpans) {
+      const text = span.textContent.trim();
+      if (text.includes('/')) {
+        return text;
+      }
+    }
+
+    return '';
+  }
+
+  function ensureTaskHasAvatar(container, repoName) {
+    const anchor = container.querySelector('a.focus-within\\:rounded-lg');
+    if (!anchor) {
+      return;
+    }
+
+    const avatarUrl = getRepoAvatarUrl(repoName);
+    const existingAvatar = anchor.querySelector('.bettercodex-task-avatar');
+
+    if (!avatarUrl) {
+      if (existingAvatar) {
+        existingAvatar.remove();
+      }
+      anchor.classList.remove('bettercodex-task-link-with-avatar');
+      return;
+    }
+
+    anchor.classList.add('bettercodex-task-link-with-avatar');
+
+    let avatar = existingAvatar;
+    if (!avatar) {
+      avatar = document.createElement('img');
+      avatar.className = 'bettercodex-task-avatar';
+      avatar.alt = '';
+      avatar.referrerPolicy = 'no-referrer';
+      anchor.insertBefore(avatar, anchor.firstChild || null);
+    }
+
+    if (avatar.src !== avatarUrl) {
+      avatar.src = avatarUrl;
+    }
   }
 
   function getRepoAvatarUrl(repoName) {
@@ -907,18 +937,13 @@
   function collectReposFromTasks() {
     const taskContainers = document.querySelectorAll('.group.task-row-container');
     taskContainers.forEach(container => {
-      const tertiaryDiv = container.querySelector('.text-token-text-tertiary.flex.gap-1');
-      if (!tertiaryDiv) {
+      const repoName = extractRepoNameFromContainer(container);
+      if (!repoName) {
         return;
       }
 
-      const allSpans = tertiaryDiv.querySelectorAll('span.truncate.empty\\:hidden');
-      allSpans.forEach(span => {
-        const text = span.textContent.trim();
-        if (text.includes('/')) {
-          ensureRepoTracked(text);
-        }
-      });
+      ensureRepoTracked(repoName);
+      ensureTaskHasAvatar(container, repoName);
     });
   }
 })();

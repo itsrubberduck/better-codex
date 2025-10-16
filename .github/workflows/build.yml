@@ -1,0 +1,34 @@
+name: Build browser extensions
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Package extensions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install web-ext CLI (optional for signing)
+        run: npm install --global web-ext
+
+      - name: Run packaging script
+        run: scripts/package_extensions.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-extensions
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
